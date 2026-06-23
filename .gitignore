@@ -1,0 +1,18 @@
+# pixi environments
+.pixi
+*.egg-info
+combined.bib
+main.pdf
+
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+
+# Bibliography backup artifacts
+*.bib.original

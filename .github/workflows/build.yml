@@ -1,0 +1,86 @@
+name: Build LaTeX document
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - '*'
+  pull_request:
+
+jobs:
+  build_latex:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Set up Git repository
+        uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        name: Tectonic Cache
+        with:
+          path: ~/.cache/Tectonic
+          key: ${{ runner.os }}-tectonic-${{ hashFiles('**/*.tex') }}
+          restore-keys: |
+            ${{ runner.os }}-tectonic-
+      - name: Set up tectonic
+        uses: wtfjoke/setup-tectonic@v3
+        with:
+          tectonic-version: 0.15.0
+          biber-version: 2.17
+      - name: Fetching the references
+        uses: jinzhezenggroup/zenglib@master
+        with:
+          output: combined.bib
+      - name: Compile LaTeX document
+        run: tectonic main.tex
+      - name: Upload PDF file
+        id: upload_artifact
+        uses: actions/upload-artifact@v7
+        with:
+          path: main.pdf
+          archive: false
+
+      - name: Comment on PR with PDF URL
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && steps.upload_artifact.outputs.artifact-url
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pdfUrl = `${{ steps.upload_artifact.outputs.artifact-url }}`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `📄 **Preview PDF Generated**\n\n[View PDF](${pdfUrl})\n\nCommit: ${context.sha}`
+            });
+
+      - name: Comment on commit with PDF URL
+        if: github.event_name == 'push' && steps.upload_artifact.outputs.artifact-url
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pdfUrl = `${{ steps.upload_artifact.outputs.artifact-url }}`;
+            github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+              body: `📄 **Preview PDF Generated**\n\n[View PDF](${pdfUrl})`
+            });
+
+  upload_to_release:
+    needs: build_latex
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-slim
+    permissions:
+      contents: write
+    steps:
+      - name: Download PDF artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: main.pdf
+
+      - name: Upload PDF to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: main.pdf
